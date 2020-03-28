@@ -546,18 +546,24 @@ def calc_alltime_stats(dfchatsub):
     """
 
     td = (dfchatsub.index.max()  - dfchatsub.index.min()).days
+    dfcont = dfchatsub['content']
+
     if (td > 1500):
         tfreq = 'MS'
+        # Ensure we include beginning date by subtracting MonthBegin
+        # https://stackoverflow.com/questions/37890391/how-to-include-end-date-in-pandas-date-range-method
+        mindate = dfcont.index.min().date() - pd.offsets.MonthBegin()
     elif (td > 50):
-        tfreq = 'W'
+        # Start weeks on Mondays so Highcharts is happy
+        # https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#anchored-offsets
+        tfreq = 'W-MON'
+        mindate = dfcont.index.min().date()
     else:
         tfreq = 'D'
+        mindate = dfcont.index.min().date()
     # tfreq = 'D'
 
-    dfcont = dfchatsub['content']
-    # Ensure we include beginning date by subtracting MonthBegin
-    # https://stackoverflow.com/questions/37890391/how-to-include-end-date-in-pandas-date-range-method
-    dfdate = pd.date_range(dfcont.index.min().date() - pd.offsets.MonthBegin(), dfcont.index.max().date(), freq=tfreq)
+    dfdate = pd.date_range(mindate, dfcont.index.max().date(), freq=tfreq)
 
     # Count messages for 4 quadrants of the day. reindex to force same date range, fillna() for missing days
     msg0 = dfcont[(dfcont.index.hour >= 0) & (dfcont.index.hour < 6)].resample(tfreq).count().reindex(dfdate).fillna(0)
