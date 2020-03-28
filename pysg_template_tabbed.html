@@ -1,0 +1,357 @@
+<!doctype html>
+<html class="no-js" lang="">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  <title>pysg WhatsApp statistics for {{title}}</title>
+  <meta name="description" content="">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+  <link rel="manifest" href="site.webmanifest">
+  <link rel="apple-touch-icon" href="icon.png">
+  <!-- Place favicon.ico in the root directory -->
+
+  <!-- <link rel="stylesheet" href="dygraph.css" /> -->
+  <link rel="stylesheet" href="tfjFl.css">
+  <!-- <script type="text/javascript" src="dygraph.min.js"></script> -->
+<!--   <script type="text/javascript" src="hc/highcharts.src-compiled.js"></script>  
+  <script type="text/javascript" src="hc/data.js"></script>   -->
+  <script src="https://code.highcharts.com/highcharts.js"></script>
+  <script src="https://code.highcharts.com/modules/sankey.js"></script>
+  <script src="https://code.highcharts.com/modules/dependency-wheel.js"></script>
+  <script src="https://code.highcharts.com/modules/exporting.js"></script>
+  <script src="https://code.highcharts.com/modules/data.js"></script>
+
+
+</head>
+<body>
+<main>
+{% for k, v in srender.items() %}
+  <input id="tab{{loop.index}}" type="radio" name="tabs" checked>
+  <label for="tab{{loop.index}}">Last {{k}} days</label>
+{% endfor %}
+
+{% for k, v in srender.items() %}
+  <section id="content{{loop.index}}">
+    Chat statistics for {{v.totals.lasttopic}}. {{v.totals.messages}} messages
+    consisting of {{v.totals.words}} words, spoken by {{v.totals.users.count}} 
+    users from {{v.totals.date.oldest}} to {{v.totals.date.newest}}, 
+    or {{v.totals.date.duration}} days.
+    <hr />
+    <div id="{{k}}alltime" style="width:100%;"></div>
+    <hr />
+    <div id="{{k}}daily" style="width:100%;"></div>
+    <hr />
+    <div id="{{k}}emoji" style="width:100%;"></div>
+    <hr />
+    <div id="{{k}}mostwords" style="width:100%;"></div>
+    <hr />
+    <div id="{{k}}timing_chat" style="width:100%;"></div>
+    <hr />
+    <div id="{{k}}network" style="width:100%;"></div>
+    <hr />
+    <h1>User activity</h1>
+    <table style="width:100%;">
+        <tr>
+            <td></td>
+            <td>Nick</td>
+            <td>Messages</td>
+            <td>When?</td>
+            <td>Words/line</td>
+            <td style="width: 70%">Random</td>
+        </tr>
+{% for activenick, v in v.active.items() %}
+        <tr class="{{ loop.cycle('odd', 'even') }}">
+            <td>{{loop.index}}</td>
+            <td>{{activenick}}</td>
+            <td>{{v.messages}}</td>
+            <td><span style="width:{{v['00:00']}}%; height:20px; display: inline-block; background-color:#6696ba;"></span><span style="width:{{v['06:00']}}%; height:20px; display: inline-block; background-color:#e2e38b;"></span><span style="width:{{v['12:00']}}%; height:20px; display: inline-block; background-color:#e7a553;"></span><span style="width:{{v['18:00']}}%; height:20px; display: inline-block; background-color:#292965;"></span></td>
+            <td>{{v.wordsperline}}</td>
+            <td style="width: 70%">{{v.random}}</td>
+        </tr>
+{% endfor %}
+    </table>
+    <hr />
+    <h1>Conversation starters: how often does everyone start talking (meaning no messages 6 hours before)</h1>
+
+    <table style="width:100%; word-break: break-all; table-layout:fixed; ">
+        <tr>
+            <td style="width: 5%"></td>
+            <td style="width: 10%">Nick</td>
+            <td style="width: 5%">Count</td>
+            <td style="width: 80%">Random</td>
+        </tr>
+{% for thisfirst in v.first %}
+        <tr class="{{ loop.cycle('odd', 'even') }}">
+            <td>{{loop.index}}</td>
+            <td>{{thisfirst[0]}}</td>
+            <td>{{thisfirst[1]}}</td>
+            <td>{{thisfirst[2]}}</td>
+        </tr>
+{% endfor %}
+    </table>
+    <hr />
+    <h1>Last word: how often do people have the last word? (no messages 6 hours after)</h1>
+
+    <table style="width:100%; word-break: break-all; table-layout:fixed; ">
+        <tr>
+            <td style="width: 5%"></td>
+            <td style="width: 10%">Nick</td>
+            <td style="width: 5%">Count</td>
+            <td style="width: 80%">Random</td>
+        </tr>
+{% for thislast in v.last %}
+        <tr class="{{ loop.cycle('odd', 'even') }}">
+            <td>{{loop.index}}</td>
+            <td>{{thislast[0]}}</td>
+            <td>{{thislast[1]}}</td>
+            <td>{{thislast[2]}}</td>
+        </tr>
+{% endfor %}
+    </table>
+
+    <hr />
+    <h1>Ignored and lonely messages (long silence before or after)</h1>
+
+    <table style="width:100%; word-break: break-all; table-layout:fixed; ">
+        <tr>
+            <td style="width: 5%"></td>
+            <td style="width: 50%">Message</td>
+            <td style="width: 10%">Nick</td>
+            <td>When?</td>
+            <td>Silence before/after (hrs)</td>
+        </tr>
+{% for mdate, v0 in v.lonely.items() %}
+        <tr class="{{ loop.cycle('odd', 'even') }}">
+            <td>{{loop.index}}</td>
+            <td>{{v0.message}}</td>
+            <td>{{v0.user}}</td>
+            <td>{{mdate}}</td>
+            <td>{{v0.gapbefore}} / {{v0.gapafter}}</td>
+        </tr>
+{% endfor %}
+    </table>
+    <hr />
+    <h1>Monologues (more than 5 messages in a row)</h1>
+    <table style="width:100%;">
+        <tr>
+            <td></td>
+            <td>Nick</td>
+            <td>Count</td>
+            <td>Longest</td>
+            <td style="width: 70%">Random</td>
+        </tr>
+{% for mono in v.monologues %}
+        <tr class="{{ loop.cycle('odd', 'even') }}">
+            <td>{{loop.index}}</td>
+            <td>{{mono[1]}}</td>
+            <td>{{mono[0]}}</td>
+            <td>{{mono[2]}}</td>
+            <td style="width: 70%">
+{% for line in mono[3] %}
+              {{line}}<br/>
+{% endfor %}
+          </td>
+        </tr>
+{% endfor %}
+    </table>
+  </section>
+{% endfor %}
+</main>
+
+<!-- Data -->
+{% for k, v in srender.items() %}
+<pre id="{{k}}alltime_data" style="display:none">
+Date,00:00-06:00,06:00-12:00,12:00-18:00,18:00-24:00
+{{v.alltime}}
+</pre>
+
+<pre id="{{k}}daily_data" style="display:none">
+Time,Messages,Words per message
+{{v.daily}}
+</pre>
+
+<pre id="{{k}}emoji_data" style="display:none">
+{{v.emoji}}
+</pre>
+
+<pre id="{{k}}mostwords_data" style="display:none">
+{{v.mostwords}}
+</pre>
+
+<pre id="{{k}}timing_chat_data" style="display:none">
+{{v.timing_chat}}
+</pre>
+
+<pre id="{{k}}network_data" style="display:none">
+{{v.network}}
+</pre>
+
+{% endfor %}
+
+<!-- Graphs -->
+{% for k, v in srender.items() %}
+<script type="text/javascript">
+  Highcharts.chart('{{k}}alltime', {
+      title: { text: 'Chat activity - last {{k}} days' },
+      chart: { zoomType: 'x', type: 'area'},
+      xAxis: { type: 'datetime' },
+      yAxis: { // Primary yAxis
+          title: { text: 'Messages' },
+          labels: { format: '{value}', },
+          reversedStacks: false 
+        },
+      tooltip: {
+          split: true,
+      },
+      plotOptions: {
+          area: { stacking: 'normal' }
+      },
+      legend: { enabled: false },
+      // https://jsfiddle.net/gh/get/library/pure/highcharts/highcharts/tree/master/samples/highcharts/data/csv/
+      data: {
+          csv: document.getElementById('{{k}}alltime_data').innerHTML
+      },
+      // Color series
+      series: [
+        {color: '#6696ba'},
+        {color: '#e2e38b'},
+        {color: '#e7a553'},
+        {color: '#292965'},
+      ],
+  });
+
+  Highcharts.chart('{{k}}daily', {
+      title: { text: 'Chat activity - per hour of day' },
+      chart: {
+        zoomType: 'x',
+      },
+      xAxis: { type: 'time' },
+      yAxis: [{ // Primary yAxis
+          title: { text: null },
+          labels: { format: '{value}', },
+          opposite: false
+      }, { // Secondary yAxis
+          title: { text: null },
+          labels: { format: '{value}', },
+          opposite: true
+      }],
+
+      legend: { enabled: false },
+      // https://jsfiddle.net/gh/get/library/pure/highcharts/highcharts/tree/master/samples/highcharts/data/csv/
+      data: {
+          csv: document.getElementById('{{k}}daily_data').innerHTML
+      },
+
+      series: [
+        {yAxis: 0, name: 'Messages', type: 'column'},
+        {yAxis: 1, name: 'Words per message', type: 'line'},
+      ],
+  });
+  Highcharts.chart('{{k}}emoji', {
+      title: { text: 'Popular emojis' },
+      chart: {
+        type: 'column',
+      },
+      yAxis: {
+        title: { text: null },
+      },
+      xAxis: {
+        type: 'category',
+        labels: {
+          style: {
+            fontSize:'18px'
+          }
+        }
+      },
+      plotOptions: {
+          series: {
+              stacking: 'normal'
+          }
+      },
+      legend: { enabled: false },
+      // https://jsfiddle.net/gh/get/library/pure/highcharts/highcharts/tree/master/samples/highcharts/data/csv/
+      data: {
+          csv: document.getElementById('{{k}}emoji_data').innerHTML
+      },
+  });
+  Highcharts.chart('{{k}}mostwords', {
+      title: { text: 'Popular words' },
+      chart: {
+        type: 'bar',
+      },
+      xAxis: {
+                type: 'category',
+      },
+      yAxis: {
+        title: { text: null },
+        labels: { enabled: false },
+      },
+      plotOptions: {
+          series: {
+              stacking: 'normal'
+          }
+      },
+      legend: { enabled: false },
+      // https://jsfiddle.net/gh/get/library/pure/highcharts/highcharts/tree/master/samples/highcharts/data/csv/
+      data: {
+          csv: document.getElementById('{{k}}mostwords_data').innerHTML
+      },
+  });
+
+  Highcharts.chart('{{k}}timing_chat', {
+      title: { text: 'Chat timing - how fast do users send messages?' },
+      chart: {
+        type: 'line',
+      },
+      yAxis: { // Primary yAxis
+          title: { text: 'Messages [%]' },
+      },
+      xAxis: { // Primary yAxis
+          title: { text: 'Time between messages [s]' },
+      },
+      legend: { enabled: false },
+      // https://jsfiddle.net/gh/get/library/pure/highcharts/highcharts/tree/master/samples/highcharts/data/csv/
+      data: {
+          csv: document.getElementById('{{k}}timing_chat_data').innerHTML
+      },
+      // Only first series as histogram on second y axis
+      // series: [
+      //   {type: 'column', yAxis: 1},
+      // ],
+  });
+
+  Highcharts.chart('{{k}}network', {
+    title: {
+        text: 'Social network - who mentions whom'
+    },
+    chart: {
+        height: 500,
+    },
+    series: [{
+        keys: ['from', 'to', 'weight'],
+        data: [
+            {{v.network}}
+        ],
+        type: 'dependencywheel',
+        name: 'Chat network',
+        dataLabels: {
+            color: '#333',
+            textPath: {
+                enabled: true,
+                attributes: {
+                    dy: 5
+                }
+            },
+            distance: 10
+        },
+        size: '95%'
+    }]
+  });
+</script>
+{% endfor %}
+
+</body>
+</html>
+
