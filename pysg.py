@@ -1,23 +1,11 @@
 #!/usr/bin/env python3.7
 # -*- coding: utf-8 -*-
-
+#
 # pysg - process whatsapp log files into IRC-like statistics page, like pisg
 # 
 ## Todo:
 # Add 'happy/sad' -- check which are happy and sad smileys - MEDIUM -- DONE partially
 #
-## Done:
-# Measure longest monologue per user - DONE
-# Extend smileys -- EASY - DONE
-# Check random string for examples -- EASY - DONE
-# Measure count of name mentions - DONE
-# Generate HTML templates -- EASY - DONE
-# Generate HTML output -- MEDIUM - DONE
-# Refactor code to functions -- MEDIUM - DONE
-# Add 'monologues' -- >=5 messages in a row? - MEDIUM - DONE
-# Add 'caps' -- check more than 90% caps? or all caps? - MEDIUM - DONE
-# Add ascii smileys to regexp DIFFICULT -- DONE
-# Add picture detection -- check for string EASY - DONE
 
 from IPython import embed
 
@@ -34,12 +22,7 @@ import operator
 import argparse
 import logging
 from collections import defaultdict
-
-USER_ALIASES = [['Joe', 'cowboy'],
-                ['Tim', 'tvwerkhoven'],
-                ['Bill', 'Bobby']]
-
-USER_YOU = 'Tim'
+import yaml
 
 # Need more than this amount of messages to count as monologue.
 MONOLOGUE_THRESHOLD = 5
@@ -61,41 +44,62 @@ re_emoji_smiley_sad = re.compile(u'['
     u'\U0001F61E-\U0001F62D]+?',
     re.UNICODE)
 
-def parse_log(chatlog, parsedlogfile=None, timeframes=(31,), chatstatsfile=None):
+def load_config(cfgfile):
+    """
+    Load use alias config so we split main program and chat-specific settings
+    """
+
+    # Init with default values
+    config = {'user_aliases': None}
+
+    try:
+        with open(cfgfile) as fd:
+            config = yaml.safe_load(fd)
+    except FileNotFoundError as e:
+        raise FileNotFoundError("Could not find configuration file: " + str(e))
+
+    return config
+
+def parse_log(chatlog, useraliases=None, parsedlogfile=None, timeframes=(31,), chatstatsfile=None, template=None):
     """
     Parse chat log files from 'chatlog', export standardized CSV to 'parsedlogfile',
     parse chat statistics over period of 'timeframes' days (iterable)
     """
-    # Input file, should be whatsapp format
-    #chatlog = "/Users/tim/Documents/2017d_pysg_whatsapp/20170430_chat.txt"
-
+    # Input file, should be whatsapp format (although format changes all the 
+    # time)
     timestr = time.strftime("%Y%m%d_%H%M%S",time.localtime())
     outdir = "pysg_{}".format(timestr)
     os.makedirs(outdir)
 
-    # Read and normalize log file, optionally store normalized file
-    chatnormalized = normalize_whatsapp(chatlog, os.path.join(outdir, parsedlogfile))
+    # Make full path if not None
+    if (parsedlogfile):
+        parsedlogfile = os.path.join(outdir, parsedlogfile)
+    if (chatstatsfile):
+        chatstatsfile = os.path.join(outdir, chatstatsfile)
 
-    dedup_usernames(chatnormalized)
+    # Read and normalize log file, optionally store normalized file
+    chatnormalized = normalize_whatsapp(chatlog, parsedlogfile)
+
+    dedup_usernames(chatnormalized, useraliases)
 
     dfchat = mk_dataframe(chatnormalized)
 
-    # Calculate statistics & optionally store as pickle
-    allstats = calc_stats_per_tf(dfchat, timeframes)
-    if (chatstatsfile): store_stats(allstats, os.path.join(outdir, chatstatsfile))
+    # Calculate statistics & optionally store as pickle & json
+    allstats = calc_stats_per_tf(dfchat, timeframes, useraliases)
+    if (chatstatsfile): store_stats(allstats, chatstatsfile)
 
     # Publish results
-    publish(allstats, outdir, "chatstats.html")
+    publish(allstats, outdir, template, "pysg_stats.html")
     
 def normalize_whatsapp(chatlog, parsedlogfile=None):
     """
     Given a raw log file from WhatsApp, normalize into parsable chatlog
 
-    Oldest format: (not supported)
+    Oldest format: (not supported anymore)
     17.12.11, 14:45:42: User Name: Test?
     Late 2013 format: hours are not zero-padded!
     17/12/2011, 4:45:42: User Name: Test?
-    2019 format:
+    2019+ format:
     [27/11/2013, 04:49:52] User Name: Bluf dat alles in t russisch is
 
     """
@@ -112,6 +116,7 @@ def normalize_whatsapp(chatlog, parsedlogfile=None):
     chatnormalized = []
     parsedmsg = ""
 
+    # @TODO Fix this ugly code duplication
     if (parsedlogfile):
         with open(chatlog) as f, open(parsedlogfile, 'w') as w:
             # Read and parse line immediately
@@ -290,6 +295,11 @@ def normalize_whatsapp_line(r, dstart=1, dend=21, ustart=23):
         userstr = r[ustart:r.find(":",ustart)]
         msgstr = r[r.find(":",ustart)+2:]
 
+    # Userstr can contain unicode stuff (u202a, u202c, xa0 xa0) if it's a 
+    # phone number, filter that out
+    # \u202a+32\xa07\xa012345678\u202c
+    userstr = userstr.strip('\u202a\u202c').replace(u'\xa0', u' ')
+
     return [datestr, userstr, mtype, msgstr]
         
 def mk_dataframe(chatparsed):
@@ -297,7 +307,7 @@ def mk_dataframe(chatparsed):
     dfchat = pd.DataFrame(chatparsed, columns=("date", "user", "mtype", "content"))
     # We use exact date matching instead of to_datetime() to speed up processing
     # 15/05/2016, 21:55:11
-    print ("parsing dates...")
+    logging.debug("Parsing dates...")
     # dfchat['date'] = dfchat.apply(lambda row: pd.to_datetime(row['date'], format="%d/%m/%Y, %H:%M:%S", exact=True, cache=True), axis=1)
     # datetime(year, month, day[, hour[, minute[, second[, microsecond[,tzinfo]]]]])
 
@@ -312,7 +322,7 @@ def mk_dataframe(chatparsed):
         axis=1)
 
     dfchat.set_index('date', inplace=True)
-    print ("parsing dates complete...")
+    logging.debug("parsing dates complete...")
 
     # Calculate number of words per message, smileys, caps, etc.
     # https://stackoverflow.com/questions/26568722/remove-unicode-emoji-using-re-in-python#26568779
@@ -326,24 +336,29 @@ def mk_dataframe(chatparsed):
 
     return dfchat
 
-def dedup_usernames(chatparsed):
+def dedup_usernames(chatparsed, useraliases):
     """
-    Using the list of synonyms above, replace with single (first) name
+    Using a list of aliases, replace all aliases with the primary name
     """
 
-    # Convert (list of list) of nicknames to lookup dict as synonym -> single name
+    if (useraliases == None):
+        return
+
+    # Make lookup dict from alias list.
+    # Input: useraliases: {<name> : [alias, alias, alias], <name>: [alias, alias], ...}
+    # Output: userdict: {<alias>: name, <alias>: name, ...}
     userdict = {}
-    for u in USER_ALIASES:
-        umain = u[0]
-        for nick in u:
-            userdict[nick] = umain
+    for primname, aliases in useraliases.items():
+        for a in aliases:
+            userdict[a] = primname
 
-    # For each name, lookup main name
+    # For each name, lookup primary name
     for i, row in enumerate(chatparsed):
-        # Look up name in dict, if doesn't exist, return name itself (i.e. don't change)
-        userm = userdict.get(row[1], row[1])
+        # Look up name in dict, if doesn't exist, return name itself
+        # (i.e. don't change) as fallback
+        primname = userdict.get(row[1], row[1])
         # Update name inplace
-        chatparsed[i][1] = userm
+        chatparsed[i][1] = primname
 
 def calc_stats_emoji(dfchat):
     """
@@ -770,13 +785,19 @@ def calc_timing(dfchat):
 
     return {'chat': chat_timing}
 
-def calc_network(dfchat):
+def calc_network(dfchat, useraliases):
     """
     Calculate social network:
     1. For each user, who do they mention and how much?
     Output:
     From, to, weight
     """
+
+    if (useraliases == None):
+        return {
+            'total': 0,
+            'network': 0
+        }
 
     # Most mentioned nicknames
     # https://stackoverflow.com/questions/13062402/find-the-index-of-the-column-in-data-frame-that-contains-the-string-as-value
@@ -785,22 +806,19 @@ def calc_network(dfchat):
     mentioned_network = defaultdict(dict)
     mentioned_total = {}
 
-    aliasdict = {}
-    for u in USER_ALIASES:
-        aliasdict[u[0]] = u[1:]
-    
+    aliasdict = useraliases    
     # For each user (object), count how many times they are mentioned by others (subject)
     for u_object in dfchat['user'].unique():
-        # Loop over aliases for object
-        alias_object = aliasdict.get(u_object, []) + [u_object]
+        # Loop over aliases for object to get all aliases for object
+        aliases_object = aliasdict.get(u_object, []) + [u_object]
 
-        # For each nickname of this user (object)
-        for nick_object in alias_object:
-            # Count by whom (subject) this nickname (object) is mentioned
-            mask_mentioned = dfchat['content'].str.lower().str.contains(nick_object.lower())
+        # For each alias of this user (object)
+        for alias_object in aliases_object:
+            # Count by whom (subject) this alias (object) is mentioned
+            mask_mentioned = dfchat['content'].str.lower().str.contains(alias_object.lower(), regex=False)
             counts_per_subject = dfchat['user'][mask_mentioned].value_counts()
             
-            # Store subjects who mentioned this nickname
+            # Store subjects who mentioned this alias
             for u_subject, count in counts_per_subject.iteritems():
                 mentioned_network[u_subject][u_object] = mentioned_network[u_subject].get(u_object, 0) + count
             # Store total mentions for this object
@@ -877,7 +895,7 @@ def calc_lonely(dfchat):
 
     return lonely, first, last
 
-def calc_stats(dfchat):
+def calc_stats(dfchat, useraliases):
     """
     Given normalized log format in chatparsed, calculate chat statistics.
     """
@@ -900,7 +918,7 @@ def calc_stats(dfchat):
 
     timing = calc_timing(dfchat)
 
-    network = calc_network(dfchat)
+    network = calc_network(dfchat, useraliases)
 
     return {'emoji': emoji, 
         'monologues': monologues, 
@@ -924,8 +942,9 @@ def store_stats(chatstats, chatstatsfile):
     #Could also work, might be the same: pickle.dump(chatstats, "dump2.pickle")
     import json
     
-    # Only works if we don't have DataFrame or NumPy stuff
-    # Debug here:
+    # Json serialization only works if we don't have DataFrame or NumPy stuff
+    # in our output. The below loop helps to debug which element might fail
+    # as it will raise an error locally.
     try:
         json.dumps(chatstats)
     except:
@@ -934,9 +953,9 @@ def store_stats(chatstats, chatstatsfile):
                 json.dumps(v)
 
     with open(chatstatsfile + ".json", 'w') as fd:
-        json.dump(chatstats, fd)
+        json.dump(chatstats, fd, indent=1)
 
-def calc_stats_per_tf(dfchat, timeframes):
+def calc_stats_per_tf(dfchat, timeframes, useraliases):
     """
     Calculate chat statistics for a number of timeframes in days.
 
@@ -962,7 +981,7 @@ def calc_stats_per_tf(dfchat, timeframes):
         if (tf_real == last_tf_real): continue
 
         # Calculate statistics, store thi
-        allstats[tf_real] = calc_stats(dfchatsub)
+        allstats[tf_real] = calc_stats(dfchatsub, useraliases)
         last_tf_real = tf_real
 
     return allstats
@@ -1083,7 +1102,7 @@ def prep_render(s0):
 
     return render
 
-def publish(stats, outdir, pubfile):
+def publish(stats, outdir, template, pubfile):
     """
     Publish results, store to disk
     """
@@ -1096,7 +1115,7 @@ def publish(stats, outdir, pubfile):
     )
     # select_autoescape(['html', 'xml'])
 
-    template = env.get_template('pysg_template_tabbed.html')
+    template = env.get_template(template)
 
     # Prep render output
     srender = {}
@@ -1112,9 +1131,10 @@ def publish(stats, outdir, pubfile):
         # stats30alltime=stats30alltime)
 
     # Store output
-    with open('pysg_template_tabbed-report.html', 'w') as fd:
+    with open(os.path.join(outdir, pubfile), 'w') as fd:
         fd.write(render)
-    
+
+
 def main():
     parser = argparse.ArgumentParser(description='process whatsapp log files into IRC-like statistics page.')
 
@@ -1124,10 +1144,14 @@ def main():
     parser.add_argument('--parsedlogfile', type=str, metavar='path',
                         help='optional file to store parsed chatlog as CSV')
     parser.add_argument('--chatstatsfile', type=str, metavar='path',
-                        help='file to store pickled chat statistics to')
+                        help='optional file to store pickled chat statistics to')
+    parser.add_argument('--config', type=str, metavar='path',
+                        help='optional file with username mappings. If not provided some functionality is lost.')
+    parser.add_argument('--template', type=str, metavar='path',
+                        help='template file to use', default="pysg_template_tabbed.html")
 
     parser.add_argument('chatlog', type=str, metavar='chatlog',
-                        help='chatlog file to parse')
+                        help='Whatsapp chatlog file to parse')
     parser.add_argument('--debug', action='store_true',
                         help='show debug output')
 
@@ -1137,7 +1161,9 @@ def main():
     logging.basicConfig(level=logging.INFO-args.debug*10, format='%(asctime)s %(message)s')
     logging.debug(args)
 
-    parse_log(args.chatlog, parsedlogfile=args.parsedlogfile, timeframes=args.timeframes, chatstatsfile=args.chatstatsfile)
+    parsecfg = load_config(args.config)
+
+    parse_log(args.chatlog, useraliases=parsecfg['user_aliases'], parsedlogfile=args.parsedlogfile, timeframes=args.timeframes, chatstatsfile=args.chatstatsfile, template=args.template)
 
 class TestSmileyMethods(unittest.TestCase):
     def test_detect(self):
