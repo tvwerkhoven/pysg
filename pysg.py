@@ -547,7 +547,7 @@ def calc_alltime_stats(dfchatsub):
 
     td = (dfchatsub.index.max()  - dfchatsub.index.min()).days
     if (td > 1500):
-        tfreq = 'M'
+        tfreq = 'MS'
     elif (td > 50):
         tfreq = 'W'
     else:
@@ -555,7 +555,9 @@ def calc_alltime_stats(dfchatsub):
     # tfreq = 'D'
 
     dfcont = dfchatsub['content']
-    dfdate = pd.date_range(dfcont.index.min().date(), dfcont.index.max(), freq=tfreq)
+    # Ensure we include beginning date by subtracting MonthBegin
+    # https://stackoverflow.com/questions/37890391/how-to-include-end-date-in-pandas-date-range-method
+    dfdate = pd.date_range(dfcont.index.min().date() - pd.offsets.MonthBegin(), dfcont.index.max().date(), freq=tfreq)
 
     # Count messages for 4 quadrants of the day. reindex to force same date range, fillna() for missing days
     msg0 = dfcont[(dfcont.index.hour >= 0) & (dfcont.index.hour < 6)].resample(tfreq).count().reindex(dfdate).fillna(0)
