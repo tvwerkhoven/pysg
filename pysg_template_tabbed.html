@@ -12,18 +12,169 @@
   <link rel="apple-touch-icon" href="icon.png">
   <!-- Place favicon.ico in the root directory -->
 
-  <!-- <link rel="stylesheet" href="dygraph.css" /> -->
-  <link rel="stylesheet" href="tfjFl.css">
-  <!-- <script type="text/javascript" src="dygraph.min.js"></script> -->
-<!--   <script type="text/javascript" src="hc/highcharts.src-compiled.js"></script>  
-  <script type="text/javascript" src="hc/data.js"></script>   -->
   <script src="https://code.highcharts.com/highcharts.js"></script>
   <script src="https://code.highcharts.com/modules/sankey.js"></script>
   <script src="https://code.highcharts.com/modules/dependency-wheel.js"></script>
   <script src="https://code.highcharts.com/modules/exporting.js"></script>
   <script src="https://code.highcharts.com/modules/data.js"></script>
 
+<style>
+  /*@import url("https://fonts.googleapis.com/css?family=Open+Sans:400,600,700");*/
+/*@import url("https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css");*/
+/*From https://codepen.io/kasn1122/pen/WPeWyz*/
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
 
+
+html, body {
+  /*height: 100vh;*/
+  font: 14px/1.5 'Helvetica',sans-serif;
+}
+
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  font: 14px/1.5 'Helvetica',sans-serif;
+  color: #345;
+  background: #f0f2f4;
+}
+
+hr { 
+  border: 0; 
+  border-bottom: 2px dashed #999; 
+  background: #fff; 
+  margin: 20px 0px 20px 0px;
+}
+
+p:not(:last-child) {
+  margin: 0 0 20px;
+}
+
+/*https://stackoverflow.com/questions/7764553/how-do-i-set-table-border-width-with-css*/
+/*table{
+  border-collapse: collapse;
+  border: 1px solid #999;
+}
+*/
+tr.odd {
+  background: #eee; 
+}
+tr.even {
+  background: none; 
+}
+
+
+main {
+  /*max-width: 100%;*/
+  width: 100%;
+  padding: 40px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+section {
+  display: none;
+  padding: 20px 0 0;
+  border-top: 1px solid #abc;
+}
+
+input {
+  display: none;
+}
+
+label {
+  display: inline-block;
+  margin: 0 0 -1px;
+  padding: 15px 25px;
+  font-weight: 600;
+  text-align: center;
+  color: #abc;
+  border: 1px solid transparent;
+}
+
+label:before {
+  font-family: fontawesome;
+  font-weight: normal;
+  margin-right: 10px;
+}
+
+label[for*='1']:before {
+  content: '🔥';
+  /*☀*/
+}
+
+label[for*='2']:before {
+  content: '⚡';
+  /*🔋🔌⚡*/
+}
+
+label[for*='3']:before {
+  content: '🌱';
+  /*🌍*/
+}
+
+label[for*='4']:before {
+  content: '📶';
+}
+
+label[for*='5']:before {
+  content: '📊';
+}
+/*💧*/
+label:hover {
+  color: #789;
+  cursor: pointer;
+}
+
+input:checked + label {
+  color: #0af;
+  border: 1px solid #abc;
+  border-top: 2px solid #0af;
+  border-bottom: 1px solid #fff;
+}
+
+#tab1:checked ~ #content1,
+#tab2:checked ~ #content2,
+#tab3:checked ~ #content3,
+#tab4:checked ~ #content4,
+#tab5:checked ~ #content5 {
+  display: block;
+}
+
+@media screen and (max-width: 800px) {
+  label {
+    font-size: 0;
+  }
+
+  label:before {
+    margin: 0;
+    font-size: 18px;
+  }
+  body {
+    padding: 20px;
+  }
+  main {
+    padding: 20px;
+  }
+}
+@media screen and (max-width: 500px) {
+  label {
+    padding: 15px;
+  }
+  body {
+    padding: 10px;
+  }
+  main {
+    padding: 20px;
+  }
+}
+</style>
 </head>
 <body>
 <main>
@@ -73,7 +224,7 @@
 {% endfor %}
     </table>
     <hr />
-    <h1>Conversation starters: how often does everyone start talking (meaning no messages 6 hours before)</h1>
+    <h1>Conversation starters: how often does everyone start talking (=no messages 6 hours before)</h1>
 
     <table style="width:100%; word-break: break-all; table-layout:fixed; ">
         <tr>
@@ -92,7 +243,7 @@
 {% endfor %}
     </table>
     <hr />
-    <h1>Last word: how often do people have the last word? (no messages 6 hours after)</h1>
+    <h1>Last word: how often do people have the last word? (=no messages 6 hours after)</h1>
 
     <table style="width:100%; word-break: break-all; table-layout:fixed; ">
         <tr>
@@ -112,21 +263,21 @@
     </table>
 
     <hr />
-    <h1>Ignored and lonely messages (long silence before or after)</h1>
+    <h1>Ignored and lonely messages (=long silence before or after)</h1>
 
     <table style="width:100%; word-break: break-all; table-layout:fixed; ">
         <tr>
             <td style="width: 5%"></td>
-            <td style="width: 50%">Message</td>
             <td style="width: 10%">Nick</td>
+            <td style="width: 50%">Message</td>
             <td>When?</td>
             <td>Silence before/after (hrs)</td>
         </tr>
 {% for mdate, v0 in v.lonely.items() %}
         <tr class="{{ loop.cycle('odd', 'even') }}">
             <td>{{loop.index}}</td>
-            <td>{{v0.message}}</td>
             <td>{{v0.user}}</td>
+            <td>{{v0.message}}</td>
             <td>{{mdate}}</td>
             <td>{{v0.gapbefore}} / {{v0.gapafter}}</td>
         </tr>
@@ -150,7 +301,7 @@
             <td>{{mono[2]}}</td>
             <td style="width: 70%">
 {% for line in mono[3] %}
-              {{line}}<br/>
+              • {{line}}<br/>
 {% endfor %}
           </td>
         </tr>
@@ -193,6 +344,25 @@ Time,Messages,Words per message
 <!-- Graphs -->
 {% for k, v in srender.items() %}
 <script type="text/javascript">
+
+Highcharts.setOptions({
+  chart: {
+    animation: false
+  },
+  tooltip: {
+    enabled: true,
+    animation: false,
+    shadow: false
+  },
+  exporting: {
+    enabled:false
+  },
+  credits: {
+    enabled: false
+  }
+});
+
+
   Highcharts.chart('{{k}}alltime', {
       title: { text: 'Chat activity - last {{k}} days' },
       chart: { zoomType: 'x', type: 'area'},
@@ -224,9 +394,7 @@ Time,Messages,Words per message
 
   Highcharts.chart('{{k}}daily', {
       title: { text: 'Chat activity - per hour of day' },
-      chart: {
-        zoomType: 'x',
-      },
+      chart: { zoomType: 'x' },
       xAxis: { type: 'time' },
       yAxis: [{ // Primary yAxis
           title: { text: null },

@@ -882,7 +882,7 @@ def calc_lonely(dfchat):
             'user': dfchat_sub.user[i+1],
             'message': dfchat_sub.content[i+1],
             'gapbefore': round(timing[i]/3600.,2),
-            'gapafter': round(timing[i]/3600.,2)
+            'gapafter': round(timing[i+1]/3600.,2)
         }
 
     # Calculate last word (more than 6 hrs no message)
